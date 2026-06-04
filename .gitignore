@@ -1,0 +1,13 @@
+node_modules/
+android/
+.sixth/
+deploy/
+www/
+generate-icons.js
+midipad-release.keystore
+MidiPad-v1.0
+capacitor.config.json
+package-lock.json
+server.js
+.vscode/
+*.keystore
