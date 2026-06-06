@@ -641,20 +641,6 @@
       border: 1px solid rgba(90, 110, 200, 0.35);
     }
 
-    /* Anel de progresso do long-press */
-    .pad::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 10px;
-      background: conic-gradient(rgba(255,255,255,0.4) var(--lp,0%), transparent var(--lp,0%));
-      opacity: 0;
-      transition: opacity 0.12s;
-      z-index: 2;
-      pointer-events: none;
-    }
-    .pad.pressing::before { opacity: 1; }
-
     .pad-inner {
       width: 100%;
       height: 100%;
@@ -704,33 +690,6 @@
       from { filter: brightness(1);    box-shadow: inset 0 2px 8px rgba(0,0,0,0.2), 0 0  8px var(--glow); }
       to   { filter: brightness(1.38); box-shadow: inset 0 1px 3px rgba(0,0,0,0.1), 0 0 26px var(--glow); }
     }
-
-    /* ── Menu de contexto ── */
-    #ctx-menu {
-      position: fixed;
-      background: #222;
-      border: 1px solid #383838;
-      border-radius: 10px;
-      padding: 5px 0;
-      z-index: 1000;
-      min-width: 172px;
-      box-shadow: 0 12px 32px rgba(0,0,0,0.75);
-      display: none;
-    }
-    #ctx-menu.visible { display: block; }
-
-    .ctx-item {
-      padding: 11px 16px;
-      cursor: pointer;
-      color: #bbb;
-      font-size: 13px;
-      display: flex;
-      align-items: center;
-      gap: 9px;
-    }
-    .ctx-item:hover { background: #303030; color: #fff; }
-    .ctx-item.danger { color: #f77; }
-    .ctx-item.danger:hover { background: #3a1a1a; }
 
     /* ── Toast ── */
     #toast {
@@ -802,20 +761,11 @@
 
 </div>
 
-<!-- Menu de contexto -->
-<div id="ctx-menu">
-  <div class="ctx-item" id="ctx-load">🎵 Importar MP3</div>
-  <div class="ctx-item" id="ctx-rename">✏️ Renomear</div>
-  <div class="ctx-item danger" id="ctx-clear">🗑️ Limpar botão</div>
-</div>
-
 <div id="progress-bar"></div>
 <div id="toast"></div>
 
-<!-- Inputs ocultos -->
-<input type="file" id="file-input"   accept="audio/*">
-<input type="file" id="file-multi"   accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac,.opus,.weba" multiple>
-<input type="file" id="file-folder"  accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac,.opus,.weba" webkitdirectory>
+<!-- Input oculto para seleção de arquivo -->
+<input type="file" id="file-input" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac,.opus,.weba">
 
 <!-- ════════════════════════ MODAL: Importar da Nuvem ════════════════════════ -->
 <div id="nuvem-modal" class="modal">
@@ -932,7 +882,6 @@ const dbGetAllEntries = () => new Promise((res, rej) => {
 // ─────────────────────── Estado ──────────────────────────────
 const PROFILES      = 7;
 const PADS          = 30;
-const LONG_PRESS_MS = 3000;
 const FADE_IN_MS    = 300;   // rápido ao iniciar
 const FADE_OUT_MS   = 900;   // suave ao parar
 const FADE_PAUSE_MS = 500;   // médio ao pausar
@@ -946,7 +895,6 @@ let playingKey     = null;
 let pausedKey      = null;   // chave do pad pausado (permite retomar)
 let isPaused       = false;
 let masterVolume   = 1;
-let ctxTarget      = null;
 const cache        = {};
 
 // [cor-clara, cor-escura, glow]
@@ -1031,51 +979,8 @@ function buildGrid() {
 
 // ─────────────────────── Eventos do pad ──────────────────────
 function attachPadEvents(pad, index) {
-  let lpTimer = null, lpRAF = null, didLong = false;
-  let lastTouchEnd = 0; // evita que eventos de mouse sintéticos do Android reativem long press
-
-  function beginLP() {
-    if (lpTimer) return;
-    didLong = false;
-    const t0 = Date.now();
-    pad.classList.add('pressing');
-    lpRAF = requestAnimationFrame(function tick() {
-      const pct = Math.min(100, ((Date.now() - t0) / LONG_PRESS_MS) * 100);
-      pad.style.setProperty('--lp', pct + '%');
-      if (pct < 100) lpRAF = requestAnimationFrame(tick);
-    });
-    lpTimer = setTimeout(() => {
-      didLong = true;
-      endLP();
-      openFilePicker(index);
-    }, LONG_PRESS_MS);
-  }
-
-  function endLP() {
-    clearTimeout(lpTimer); lpTimer = null;
-    cancelAnimationFrame(lpRAF);
-    pad.classList.remove('pressing');
-    pad.style.setProperty('--lp', '0%');
-  }
-
-  // ── Touch — passive:true é OBRIGATÓRIO para o evento click disparar ──
-  // Se chamarmos e.preventDefault() no touchstart, o click é suprimido pelo browser
-  pad.addEventListener('touchstart',  () => beginLP(),      { passive: true });
-  pad.addEventListener('touchend',    () => { lastTouchEnd = Date.now(); endLP(); });
-  pad.addEventListener('touchcancel', () => { endLP(); didLong = false; });
-
-  // ── Mouse (desktop) — ignora eventos sintéticos gerados após touch ──
-  pad.addEventListener('mousedown',  () => { if (Date.now() - lastTouchEnd > 500) beginLP(); });
-  pad.addEventListener('mouseup',    () => { if (Date.now() - lastTouchEnd > 500) endLP(); });
-  pad.addEventListener('mouseleave', () => { if (Date.now() - lastTouchEnd > 500 && lpTimer) endLP(); });
-
-  // ── Click = play/stop — único evento que dispara em touch E mouse ──
-  pad.addEventListener('click', () => {
-    if (didLong) { didLong = false; return; }
-    onPadTap(index);
-  });
-
-  pad.addEventListener('contextmenu', e => { e.preventDefault(); showCtx(e, index); });
+  pad.addEventListener('click', () => onPadTap(index));
+  pad.addEventListener('contextmenu', e => e.preventDefault());
 }
 
 // ─────────────────────── Fade helpers ────────────────────────
@@ -1178,7 +1083,7 @@ function findPadIndex(key) {
 function onPadTap(index) {
   const key  = padKey(currentProfile, index);
   const data = cache[key];
-  if (!data) { toast('Segure 3s para importar MP3'); return; }
+  if (!data) return;
 
   // Pad pausado → retomar
   if (isPaused && pausedKey === key) { togglePause(); return; }
@@ -1296,26 +1201,6 @@ function stopAudio() {
 }
 
 // ─────────────────────── Importar MP3 ────────────────────────
-function openFilePicker(index) {
-  const inp = document.getElementById('file-input');
-  inp.onchange = () => loadFile(inp.files[0], index);
-  inp.value = '';
-  inp.click();
-}
-
-async function loadFile(file, index) {
-  if (!file) return;
-  const key  = padKey(currentProfile, index);
-  const name = file.name.replace(/\.[^/.]+$/, '').slice(0, 26);
-  // Armazena como Blob — mais confiável que ArrayBuffer
-  const blob = file.slice(0, file.size, file.type || 'audio/mpeg');
-  const data = { name, audio: blob };
-  cache[key] = data;
-  await dbSet(key, data);
-  await refreshPad(index);
-  await updateProfileDots(currentProfile);
-  toast(`"${name}" carregado! Toque para reproduzir.`);
-}
 
 // ─────────────────────── Trocar perfil ───────────────────────
 async function switchProfile(i) {
@@ -1343,59 +1228,6 @@ async function refreshPad(index) {
   }
 }
 
-// ─────────────────────── Menu de contexto ────────────────────
-function showCtx(e, index) {
-  ctxTarget = index;
-  const m = document.getElementById('ctx-menu');
-  if (window.matchMedia('(orientation: portrait)').matches) {
-    // Interface girada 90°: converte as coordenadas da tela para o
-    // espaço girado para o menu aparecer junto do pad pressionado.
-    const x = e.clientY;
-    const y = innerWidth - e.clientX;
-    m.style.left = Math.max(0, Math.min(x, innerHeight - 186)) + 'px';
-    m.style.top  = Math.max(0, Math.min(y, innerWidth  - 140)) + 'px';
-  } else {
-    m.style.left = Math.min(e.clientX, innerWidth - 186) + 'px';
-    m.style.top  = Math.min(e.clientY, innerHeight - 140) + 'px';
-  }
-  m.classList.add('visible');
-}
-function closeCtx() {
-  document.getElementById('ctx-menu').classList.remove('visible');
-  ctxTarget = null;
-}
-
-document.getElementById('ctx-load').addEventListener('click', () => {
-  const i = ctxTarget; closeCtx(); if (i !== null) openFilePicker(i);
-});
-
-document.getElementById('ctx-rename').addEventListener('click', async () => {
-  const i = ctxTarget; closeCtx(); if (i === null) return;
-  const key  = padKey(currentProfile, i);
-  const data = cache[key] ?? await dbGet(key);
-  if (!data) { toast('Botão vazio'); return; }
-  const n = prompt('Novo nome:', data.name);
-  if (!n) return;
-  data.name = n.slice(0, 26);
-  cache[key] = data;
-  await dbSet(key, data);
-  await refreshPad(i);
-});
-
-document.getElementById('ctx-clear').addEventListener('click', async () => {
-  const i = ctxTarget; closeCtx(); if (i === null) return;
-  const key = padKey(currentProfile, i);
-  if (playingKey === key) stopAudio();
-  delete cache[key];
-  await dbDel(key);
-  await refreshPad(i);
-  await updateProfileDots(currentProfile);
-  toast('Botão limpo');
-});
-
-document.addEventListener('click', e => {
-  if (!document.getElementById('ctx-menu').contains(e.target)) closeCtx();
-});
 
 // ─────────────────────── Volume (arrasto dinâmico) ───────────
 const volEl    = document.getElementById('volume-slider');
@@ -1464,59 +1296,6 @@ function setProgress(pct) {
   document.getElementById('progress-bar').style.width = pct + '%';
 }
 
-async function importBatch(files) {
-  const audioFiles = Array.from(files).filter(isAudioFile)
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  if (!audioFiles.length) { toast('Nenhum arquivo de áudio encontrado'); return; }
-
-  setProgress(1);
-  let filled    = 0;
-  let p         = currentProfile; // perfil atual (começa no ativo)
-  let i         = 0;              // índice do pad dentro do perfil
-  let lastProf  = p;
-
-  for (const file of audioFiles) {
-    // Avança até encontrar slot vazio (cruza perfis automaticamente)
-    while (p < PROFILES) {
-      const k = padKey(p, i);
-      if (!cache[k]) { const d = await dbGet(k); if (d) cache[k] = d; }
-      if (!cache[k]) break;          // slot vazio encontrado
-      i++;
-      if (i >= PADS) { i = 0; p++; } // perfil cheio → próximo
-    }
-
-    if (p >= PROFILES) {
-      toast(`Todos os perfis cheios! ${filled} importadas.`);
-      break;
-    }
-
-    lastProf = p;
-    const key  = padKey(p, i);
-    const name = file.name.replace(/\.[^/.]+$/, '').slice(0, 26);
-    const blob = file.slice(0, file.size, file.type || 'audio/mpeg');
-    const data = { name, audio: blob };
-    cache[key] = data;
-    await dbSet(key, data);
-    if (p === currentProfile) await refreshPad(i);
-
-    filled++;
-    i++;
-    if (i >= PADS) { i = 0; p++; }
-
-    setProgress(Math.round((filled / audioFiles.length) * 100));
-    if (filled % 8 === 0 || filled === audioFiles.length)
-      toast(`Importando ${filled}/${audioFiles.length}… Perfil ${lastProf + 1}`);
-  }
-
-  // Atualiza pontos de todos os perfis afetados
-  for (let pp = currentProfile; pp <= Math.min(lastProf, PROFILES - 1); pp++)
-    await updateProfileDots(pp);
-
-  setTimeout(() => setProgress(0), 700);
-  const nProfiles = lastProf - currentProfile + 1;
-  toast(`✓ ${filled} músicas em ${nProfiles} perfil(s) (${currentProfile + 1}–${lastProf + 1})!`);
-}
 
 // ───────────── Sincronizar com pasta na nuvem (SEM login) ─────
 // Lê uma pasta "musicas/" hospedada junto do programa (GitHub Pages,
@@ -1638,13 +1417,68 @@ document.getElementById('btn-clear-all').addEventListener('click', async () => {
   toast(`Perfil ${currentProfile + 1} limpo!`);
 });
 
-// Botão: pasta inteira
+// Botão: importar arquivo — abre seletor e mostra pad picker
+let pendingLocalFile = null;
+let padPickMode = 'cloud'; // 'cloud' | 'local'
+
 document.getElementById('btn-folder').addEventListener('click', () => {
-  const inp = document.getElementById('file-folder');
-  inp.onchange = () => importBatch(inp.files);
+  const inp = document.getElementById('file-input');
+  inp.onchange = () => {
+    if (!inp.files[0]) return;
+    pendingLocalFile = inp.files[0];
+    showLocalFilePadPicker();
+  };
   inp.value = '';
   inp.click();
 });
+
+function showLocalFilePadPicker() {
+  const file = pendingLocalFile;
+  if (!file) return;
+  padPickMode = 'local';
+
+  const label = file.name.replace(/\.[^/.]+$/, '').slice(0, 50);
+  document.getElementById('nuvem-padpick-songname').textContent = '♪ ' + label;
+  document.getElementById('nuvem-padpick-profnum').textContent  = currentProfile + 1;
+  document.getElementById('nuvem-padpick-back').textContent     = '✕ Cancelar';
+
+  const grid = document.getElementById('nuvem-padpick-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < PADS; i++) {
+    const data = cache[padKey(currentProfile, i)];
+    const btn  = document.createElement('button');
+    btn.className = 'pad-pick-btn ' + (data ? 'has-audio' : 'empty');
+    btn.title     = data ? (data.name || 'Pad ' + (i + 1)) : 'Pad ' + (i + 1) + ' — vazio';
+    btn.innerHTML = `<span class="pad-pick-num">${i + 1}</span><span class="pad-pick-label">${data ? (data.name || '').slice(0, 8) : 'vazio'}</span>`;
+    btn.addEventListener('click', () => assignLocalFileToPad(i));
+    grid.appendChild(btn);
+  }
+
+  document.getElementById('nuvem-step-info').classList.remove('active');
+  document.getElementById('nuvem-step-pick').classList.remove('active');
+  document.getElementById('nuvem-step-padpick').classList.add('active');
+  document.getElementById('nuvem-modal').classList.add('open');
+}
+
+async function assignLocalFileToPad(padIndex) {
+  const file = pendingLocalFile;
+  pendingLocalFile = null;
+  padPickMode = 'cloud';
+  if (!file) return;
+
+  closeNuvemModal();
+
+  const name = file.name.replace(/\.[^/.]+$/, '').slice(0, 26);
+  const blob = file.slice(0, file.size, file.type || 'audio/mpeg');
+  const key  = padKey(currentProfile, padIndex);
+  const data = { name, audio: blob };
+  if (playingKey === key) stopAudioNow();
+  cache[key] = data;
+  await dbSet(key, data);
+  await refreshPad(padIndex);
+  await updateProfileDots(currentProfile);
+  toast(`✓ "${name}" → perfil ${currentProfile + 1}, pad ${padIndex + 1}`);
+}
 
 // ─────────────────────── Nuvem (GitHub sync sem login) ────────
 let nuvemSyncing = false;
@@ -1677,6 +1511,9 @@ function closeNuvemModal() {
   document.getElementById('nuvem-step-pick').classList.remove('active');
   document.getElementById('nuvem-step-padpick').classList.remove('active');
   document.getElementById('nuvem-step-info').classList.add('active');
+  document.getElementById('nuvem-padpick-back').textContent = '← Voltar';
+  pendingLocalFile = null;
+  padPickMode = 'cloud';
 }
 
 async function startNuvemSync() {
@@ -1786,7 +1623,14 @@ document.getElementById('nuvem-pick-back').addEventListener('click', () => {
 });
 document.getElementById('nuvem-padpick-back').addEventListener('click', () => {
   document.getElementById('nuvem-step-padpick').classList.remove('active');
-  document.getElementById('nuvem-step-pick').classList.add('active');
+  if (padPickMode === 'local') {
+    pendingLocalFile = null;
+    padPickMode = 'cloud';
+    document.getElementById('nuvem-padpick-back').textContent = '← Voltar';
+    closeNuvemModal();
+  } else {
+    document.getElementById('nuvem-step-pick').classList.add('active');
+  }
 });
 
 // ─────────────────────── Nuvem: escolher música individual ────
@@ -1914,7 +1758,7 @@ async function init() {
 
   if (isFirstRun) {
     localStorage.setItem('midi-pad-v2', '1');
-    toast('Bem-vindo! Segure 3s em um botão para importar um MP3. 💾 Backup salva tudo.');
+    toast('Bem-vindo! Use 📂 Pasta para importar músicas.');
   }
   renderVolume();
 
