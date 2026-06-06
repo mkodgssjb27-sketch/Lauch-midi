@@ -891,10 +891,9 @@ let currentAudio    = null;
 let fadeInRAF       = null;
 let fadingOutAudio  = null;
 let cancelFadeOutFn = null;
-let playingKey     = null;
-let fadingKey      = null;   // chave do pad cujo áudio está em fade-out
-let pausedKey      = null;   // chave do pad pausado (permite retomar)
-let isPaused       = false;
+let playingKey      = null;
+let pausedKey       = null;
+let isPaused        = false;
 let masterVolume   = 1;
 const cache        = {};
 
@@ -980,29 +979,27 @@ function buildGrid() {
 
 // ─────────────────────── Eventos do pad ──────────────────────
 function attachPadEvents(pad, index) {
-  let touchMoved = false, startX = 0, startY = 0;
+  let moved = false, startX = 0, startY = 0;
 
-  pad.addEventListener('touchstart', e => {
-    touchMoved = false;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-  }, { passive: true });
+  pad.addEventListener('pointerdown', e => {
+    moved = false;
+    startX = e.clientX;
+    startY = e.clientY;
+  });
 
-  pad.addEventListener('touchmove', e => {
-    if (Math.abs(e.touches[0].clientX - startX) > 10 ||
-        Math.abs(e.touches[0].clientY - startY) > 10) touchMoved = true;
-  }, { passive: true });
+  pad.addEventListener('pointermove', e => {
+    if (Math.abs(e.clientX - startX) > 12 ||
+        Math.abs(e.clientY - startY) > 12) moved = true;
+  });
 
-  // touchend: resposta imediata + preventDefault suprime o click sintético,
-  // impedindo que ele reinicie a música após o fade começar.
-  pad.addEventListener('touchend', e => {
-    if (touchMoved) return;
+  // pointerup cobre touch e mouse num único evento.
+  // preventDefault() aqui suprime o click sintético de forma garantida,
+  // independente de o touchstart ser passive ou não.
+  pad.addEventListener('pointerup', e => {
+    if (moved) return;
     e.preventDefault();
     onPadTap(index);
-  }); // NÃO passive — precisa de preventDefault
-
-  // click só chega aqui via mouse/desktop (touchend já suprimiu o sintético)
-  pad.addEventListener('click', () => onPadTap(index));
+  });
 
   pad.addEventListener('contextmenu', e => e.preventDefault());
 }
@@ -1013,7 +1010,7 @@ function startFadeIn(audio, targetVol) {
   audio.volume = 0;
   const t0 = performance.now();
   function tick(now) {
-    if (audio !== currentAudio) { fadeInRAF = null; return; } // áudio trocou — para
+    if (audio !== currentAudio) { fadeInRAF = null; return; }
     const p = Math.min(1, (now - t0) / FADE_IN_MS);
     audio.volume = p * targetVol;
     if (p < 1) fadeInRAF = requestAnimationFrame(tick);
@@ -1022,8 +1019,9 @@ function startFadeIn(audio, targetVol) {
   fadeInRAF = requestAnimationFrame(tick);
 }
 
+// setInterval-based fade — mais confiável que RAF no Chrome Android
+// (RAF pode ser throttled durante eventos de toque)
 function startFadeOut(audio, ms, onDone) {
-  // Cancela fade-out anterior e para o áudio anterior imediatamente
   if (cancelFadeOutFn) { cancelFadeOutFn(); cancelFadeOutFn = null; }
   if (fadingOutAudio && fadingOutAudio !== audio) {
     fadingOutAudio.pause();
@@ -1031,25 +1029,30 @@ function startFadeOut(audio, ms, onDone) {
   }
   fadingOutAudio = audio;
 
-  const v0 = audio.volume > 0 ? audio.volume : 1;
-  const t0  = performance.now();
-  let raf;
+  // Garante que o fade começa no volume correto (não em 0)
+  const v0 = audio.volume > 0 ? audio.volume : masterVolume;
+  audio.volume = v0;
 
-  (function tick(now) {
-    const p = Math.min(1, (now - t0) / ms);
-    audio.volume = v0 * (1 - p);
-    if (p < 1) {
-      raf = requestAnimationFrame(tick);
-    } else {
-      audio.volume = 0;
+  const STEP_MS = 20;
+  const steps   = Math.max(1, Math.round(ms / STEP_MS));
+  let   step    = 0;
+
+  const id = setInterval(() => {
+    step++;
+    if (step >= steps) {
+      clearInterval(id);
+      audio.volume   = 0;
+      audio.pause();
       fadingOutAudio  = null;
       cancelFadeOutFn = null;
       onDone?.();
+    } else {
+      audio.volume = v0 * (1 - step / steps);
     }
-  })(performance.now());
+  }, STEP_MS);
 
   cancelFadeOutFn = () => {
-    cancelAnimationFrame(raf);
+    clearInterval(id);
     fadingOutAudio  = null;
     cancelFadeOutFn = null;
   };
@@ -1109,46 +1112,41 @@ function onPadTap(index) {
   const data = cache[key];
   if (!data) return;
 
-  // Pad pausado → retomar
   if (isPaused && pausedKey === key) { togglePause(); return; }
 
-  // Mesmo pad tocando → fade out e stop
+  // Mesmo pad tocando (ou em fade-out do mesmo pad) → fade out e stop
   if (playingKey === key) { stopWithFade(); return; }
 
-  // Pad em fade-out → ignorar (evita reinício por click sintético duplicado)
-  if (fadingKey === key) return;
-
-  // Pad diferente → para o atual agora e toca o novo imediatamente
+  // Pad diferente ou pad parado → inicia
   stopAudioNow();
   playPad(key, data, index);
 }
 
 function stopAudioNow() {
   if (fadeInRAF) { cancelAnimationFrame(fadeInRAF); fadeInRAF = null; }
-  const wasfadingAudio = fadingOutAudio; // captura antes de cancelFadeOutFn zerá-lo
+  const wasFadingAudio = fadingOutAudio; // captura antes de cancelFadeOutFn zerá-lo
   if (cancelFadeOutFn) { cancelFadeOutFn(); cancelFadeOutFn = null; }
   const audio = currentAudio;
-  currentAudio  = null;
+  currentAudio   = null;
   fadingOutAudio = null;
-  fadingKey = null;
-  playingKey = null; pausedKey = null; isPaused = false;
+  playingKey     = null;
+  pausedKey      = null;
+  isPaused       = false;
   document.querySelectorAll('.pad').forEach(p => p.classList.remove('playing', 'paused'));
   updatePauseBtn();
   killAudio(audio);
-  if (wasfadingAudio && wasfadingAudio !== audio) killAudio(wasfadingAudio);
+  if (wasFadingAudio && wasFadingAudio !== audio) killAudio(wasFadingAudio);
 }
 
 function stopWithFade() {
   if (!currentAudio) return;
-  // Duplo toque durante fade → para imediatamente
+  // Segundo toque enquanto já está em fade → para imediatamente
   if (cancelFadeOutFn) { stopAudioNow(); return; }
 
   const audio = currentAudio;
 
   if (fadeInRAF) { cancelAnimationFrame(fadeInRAF); fadeInRAF = null; }
 
-  // Marca qual pad está em fade para bloquear reinício por clicks duplicados
-  fadingKey    = playingKey;
   currentAudio = null;
   playingKey   = null;
   pausedKey    = null;
@@ -1156,7 +1154,7 @@ function stopWithFade() {
   document.querySelectorAll('.pad').forEach(p => p.classList.remove('playing', 'paused'));
   updatePauseBtn();
 
-  startFadeOut(audio, FADE_OUT_MS, () => { fadingKey = null; killAudio(audio); });
+  startFadeOut(audio, FADE_OUT_MS, () => killAudio(audio));
 }
 
 function blobOf(data) {
@@ -1165,24 +1163,21 @@ function blobOf(data) {
 }
 
 function playPad(key, data, index) {
-  // Para qualquer áudio anterior imediatamente
   stopAudioNow();
 
   const blob  = blobOf(data);
   const url   = URL.createObjectURL(blob);
   const audio = new Audio(url);
-  audio._url    = url;
-  audio.volume  = masterVolume; // volume correto desde o início — sem depender de RAF
+  audio._url   = url;
+  audio.volume = 0; // startFadeIn sobe para masterVolume
 
-  // 'ended': só age se este áudio ainda for o ativo
   audio.addEventListener('ended', () => {
     revokeAudio(audio);
     if (audio === currentAudio) stopAudioNow();
   });
-  // 'error': ignora kills intencionais (src='') e erros de áudios já substituídos
   audio.addEventListener('error', () => {
-    if (!audio._url) return;            // kill intencional — ignorar
-    if (audio !== currentAudio) return; // já foi substituído — ignorar
+    if (!audio._url) return;
+    if (audio !== currentAudio) return;
     revokeAudio(audio);
     toast('Erro ao reproduzir. Reimporte o MP3.');
     stopAudioNow();
@@ -1197,17 +1192,16 @@ function playPad(key, data, index) {
   document.querySelector(`.pad[data-i="${index}"]`)?.classList.add('playing');
   updatePauseBtn();
 
-  audio.volume = 0; // mudo no início para suprimir o glitch do codec MP3
   audio.play()
     .then(() => {
-      // .then() só dispara quando o browser confirma reprodução real
-      // Neste ponto o áudio ainda é currentAudio? Se sim, sobe volume.
-      if (audio === currentAudio) audio.volume = masterVolume;
+      if (audio === currentAudio) startFadeIn(audio, masterVolume);
     })
     .catch(err => {
-      if (err.name === 'AbortError') return; // kill intencional via stopAudioNow() — ignorar
+      if (err.name === 'AbortError') return;
+      if (audio !== currentAudio) return;
       revokeAudio(audio);
-      if (audio === currentAudio) stopAudioNow();
+      toast('Erro ao reproduzir. Reimporte o MP3.');
+      stopAudioNow();
     });
 }
 
@@ -1217,15 +1211,9 @@ function revokeAudio(audio) {
 
 function killAudio(audio) {
   if (!audio) return;
-  audio.onended = null;   // cancela handler de fim
-  audio.onerror = null;   // cancela handler de erro
   audio.pause();
-  revokeAudio(audio);     // revoga _url → error handler ignora
-  audio.src = '';         // src='' gera AbortError no play() → catch ignora AbortError
-}
-
-function stopAudio() {
-  stopAudioNow();
+  revokeAudio(audio); // seta _url=null → error handler ignora o evento gerado por src=''
+  audio.src = '';
 }
 
 // ─────────────────────── Importar MP3 ────────────────────────
@@ -1770,8 +1758,8 @@ function unlockAudio() {
     ctx.resume().then(() => ctx.close()).catch(() => {});
   } catch(e) {}
 }
+document.addEventListener('pointerup', unlockAudio, { once: true });
 document.addEventListener('click',    unlockAudio, { once: true });
-document.addEventListener('touchend', unlockAudio, { once: true });
 
 // ─────────────────────── Init ────────────────────────────────
 async function init() {
