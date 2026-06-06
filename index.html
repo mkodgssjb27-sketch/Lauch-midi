@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -9,7 +9,6 @@
   <meta name="apple-mobile-web-app-title" content="MIDI Pad">
   <link rel="manifest" href="manifest.json">
   <title>MIDI Pad Controller</title>
-  <script src="gdrive-sync.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
@@ -746,7 +745,7 @@
       <button class="tb-btn danger-btn" id="btn-clear-all" title="Limpar todos os pads do perfil atual">🗑️ Limpar tudo</button>
       <button class="tb-btn" id="btn-folder" title="Importar uma pasta inteira">📂 Pasta</button>
       <button class="tb-btn save" id="btn-export" title="Salvar um arquivo de backup com TODAS as mídias e edições (todos os perfis)">💾 Backup</button>
-      <button class="tb-btn drive" id="btn-gdrive" title="Importar do Google Drive">☁ Drive</button>
+      <button class="tb-btn save" id="btn-sync" title="Importar músicas da pasta musicas/ no GitHub — sem login, qualquer dispositivo">☁ Nuvem</button>
     </div>
     <div id="grid"></div>
   </div>
@@ -768,129 +767,48 @@
 <input type="file" id="file-multi"   accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac,.opus,.weba" multiple>
 <input type="file" id="file-folder"  accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac,.opus,.weba" webkitdirectory>
 
-<!-- ════════════════════════ MODAL: Google Drive Setup ════════════════════════ -->
-<div id="gdrive-setup-modal" class="modal">
+<!-- ════════════════════════ MODAL: Importar da Nuvem ════════════════════════ -->
+<div id="nuvem-modal" class="modal">
   <div class="modal-overlay"></div>
   <div class="modal-content">
-    <button class="modal-close" id="gdrive-setup-close">&times;</button>
-    
-    <h2>☁ Sincronizar com Google Drive</h2>
-    
-    <!-- Step 0: Drive já conectado — mostra status e opções -->
-    <div id="gdrive-step-status" class="modal-step hidden">
-      <div class="success-box" style="margin-bottom: 16px;">
-        <h3>☁ Drive Conectado</h3>
-        <p>Pasta: <strong id="gdrive-connected-folder-name"></strong></p>
-        <p style="margin-top: 6px; font-size: 11px; color: #888;">Último sync: <span id="gdrive-last-sync-time"></span></p>
-      </div>
-      <p class="modal-desc" style="font-size: 12px;">Abra este app em qualquer telefone, clique em <strong>☁ Drive</strong> e sincronize para restaurar todos os seus pads.</p>
-      <div class="modal-actions" style="flex-direction: column; gap: 8px;">
-        <button id="gdrive-sync-now" class="btn btn-primary">🔄 Sincronizar Agora</button>
-        <button id="gdrive-change-folder" class="btn btn-secondary">📁 Trocar Pasta</button>
-        <button id="gdrive-disconnect" class="btn btn-secondary" style="color: #f77; border-color: #4a2020;">⛔ Desconectar Drive</button>
-      </div>
-    </div>
+    <button class="modal-close" id="nuvem-close">&times;</button>
+    <h2>☁ Importar da Nuvem</h2>
 
-    <!-- Step 1: Verificar se já existe Client ID salvo -->
-    <div id="gdrive-step-clientid" class="modal-step">
-      <p class="modal-desc">Para usar o Google Drive, você precisa criar um <strong>Client ID</strong> no Google Cloud (gratuito, leva 5 minutos):</p>
-      
-      <ol class="modal-list">
-        <li>Acesse <a href="https://console.cloud.google.com" target="_blank" rel="noopener">console.cloud.google.com</a></li>
-        <li>Crie um novo projeto</li>
-        <li>Vá em <strong>APIs e Serviços → Biblioteca</strong></li>
-        <li>Busque e ative: <strong>Google Drive API</strong> e <strong>Google Picker API</strong></li>
-        <li>Clique em <strong>Credenciais → Criar novo → ID do cliente OAuth 2.0</strong></li>
-        <li>Tipo: <strong>Aplicativo da Web</strong></li>
-        <li>Em <strong>Origens JavaScript autorizadas</strong>, adicione: <code id="gdrive-origin-code">http://localhost:8765</code></li>
-        <li>Copie o <strong>ID do Cliente</strong> e cole aqui:</li>
-      </ol>
-      
-      <div class="form-group">
-        <input type="text" id="gdrive-clientid-input" class="form-input" placeholder="Cole seu Client ID (termina em .apps.googleusercontent.com)" autocomplete="off">
-        <small class="form-help">Seu Client ID será salvo localmente e usado apenas para conectar seu Drive.</small>
-      </div>
-      
-      <div class="modal-actions">
-        <button id="gdrive-save-clientid" class="btn btn-primary">Conectar e Continuar</button>
-        <button id="gdrive-setup-cancel" class="btn btn-secondary">Cancelar</button>
-      </div>
-    </div>
+    <!-- Step 1: informações + botão de sync -->
+    <div id="nuvem-step-info" class="modal-step active">
+      <p class="modal-desc">Suas músicas ficam na pasta <strong>musicas/</strong> do repositório GitHub. Qualquer dispositivo pode importar — sem login, sem senha.</p>
 
-    <!-- Step 2: Buscar pasta do Drive por nome -->
-    <div id="gdrive-step-folder" class="modal-step hidden">
-      <p class="modal-desc">Digite o nome da pasta do Drive que contém suas mídias:</p>
-
-      <div class="form-group" style="display:flex; gap:8px;">
-        <input type="text" id="gdrive-folder-search" class="form-input" placeholder='Ex: "remixes midi"' style="flex:1;">
-        <button id="gdrive-folder-search-btn" class="btn btn-primary" style="flex:0; padding:0 14px;">Buscar</button>
+      <div class="success-box" style="margin-bottom:14px;">
+        <p style="font-weight:600; margin-bottom:8px; color:#8cf;">📁 Como adicionar músicas:</p>
+        <ol class="modal-list">
+          <li>Acesse <a href="https://github.com/mkodgssjb27-sketch/Lauch-midi/tree/main/musicas" target="_blank" rel="noopener">github.com → pasta musicas/</a></li>
+          <li>Clique em <strong>Add file → Upload files</strong></li>
+          <li>Arraste seus arquivos .mp3 / .wav / .m4a e confirme</li>
+          <li>Volte aqui e clique <strong>Sincronizar Agora</strong></li>
+        </ol>
       </div>
 
-      <div id="gdrive-folders-loading" class="loading-spinner" style="display:none;">
-        Buscando... <span class="spinner"></span>
-      </div>
-
-      <div id="gdrive-folders-list" class="folders-list" style="display:none;"></div>
-
-      <div id="gdrive-folders-error" class="error-box"></div>
+      <p id="nuvem-last-sync-txt" style="font-size:12px; color:#888; margin-bottom:14px;"></p>
 
       <div class="modal-actions">
-        <button id="gdrive-back-folder" class="btn btn-secondary">← Voltar</button>
-        <button id="gdrive-setup-cancel2" class="btn btn-secondary">Cancelar</button>
+        <button id="nuvem-do-sync" class="btn btn-primary">🔄 Sincronizar Agora</button>
+        <button id="nuvem-info-close" class="btn btn-secondary">Fechar</button>
       </div>
     </div>
 
-    <!-- Step 3: Importação de arquivos -->
-    <div id="gdrive-step-import" class="modal-step hidden">
-      <p class="modal-desc" id="gdrive-import-desc"></p>
-      
-      <div id="gdrive-import-progress" class="progress-container">
+    <!-- Step 2: progresso do sync -->
+    <div id="nuvem-step-prog" class="modal-step">
+      <p class="modal-desc" id="nuvem-prog-title">Sincronizando...</p>
+      <div class="progress-container">
         <div class="progress-bar-bg">
-          <div id="gdrive-import-bar" class="progress-bar-fill"></div>
+          <div id="nuvem-prog-bar" class="progress-bar-fill" style="width:0%"></div>
         </div>
-        <p id="gdrive-import-status" class="progress-status">Preparando...</p>
+        <p id="nuvem-prog-status" class="progress-status">Buscando arquivos...</p>
       </div>
-      
-      <div id="gdrive-import-results" class="import-results hidden">
-        <p id="gdrive-import-summary"></p>
-        <div id="gdrive-import-files-list" style="max-height: 200px; overflow-y: auto; font-size: 11px;"></div>
-      </div>
-      
       <div class="modal-actions">
-        <button id="gdrive-import-done" class="btn btn-primary hidden">Concluído!</button>
-        <button id="gdrive-setup-cancel3" class="btn btn-secondary">Cancelar</button>
+        <button id="nuvem-sync-close" class="btn btn-primary" style="display:none;">✓ Fechar</button>
+        <button id="nuvem-sync-cancel" class="btn btn-secondary">Fechar</button>
       </div>
-    </div>
-
-    <!-- Step 4: Configuração concluída -->
-    <div id="gdrive-step-success" class="modal-step hidden">
-      <div class="success-box">
-        <h3>✓ Configuração Concluída!</h3>
-        <p>Seu Drive está conectado à pasta: <strong id="gdrive-success-folder-name"></strong></p>
-        <p>Você pode sincronizar a qualquer momento clicando em <strong>☁ Drive</strong> ou abrindo este app em qualquer telefone.</p>
-      </div>
-      
-      <div class="modal-actions">
-        <button id="gdrive-success-close" class="btn btn-primary">Fechar</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ════════════════════════ MODAL: Google Drive Status ════════════════════════ -->
-<div id="gdrive-status-modal" class="modal">
-  <div class="modal-overlay"></div>
-  <div class="modal-content">
-    <button class="modal-close" id="gdrive-status-close">&times;</button>
-    
-    <h2>☁ Google Drive</h2>
-    
-    <div id="gdrive-status-content">
-      <!-- Será preenchido dinamicamente -->
-    </div>
-    
-    <div class="modal-actions">
-      <button id="gdrive-status-close-btn" class="btn btn-secondary">Fechar</button>
     </div>
   </div>
 </div>
@@ -1503,6 +1421,132 @@ async function importBatch(files) {
   toast(`✓ ${filled} músicas em ${nProfiles} perfil(s) (${currentProfile + 1}–${lastProf + 1})!`);
 }
 
+// ───────────── Sincronizar com pasta na nuvem (SEM login) ─────
+// Lê uma pasta "musicas/" hospedada junto do programa (GitHub Pages,
+// Netlify, etc.) e baixa todas as músicas para os pads. Não usa conta
+// nem login do Google → funciona em qualquer telefone, qualquer navegador.
+//  • GitHub Pages: a lista é automática (API pública do GitHub).
+//  • Outros hosts: use o índice "musicas/playlist.json" (gerado pelo
+//    script gerar-playlist.js).
+// A pasta é a fonte da verdade: as músicas preenchem os pads em ordem
+// (perfil 1 → perfil 7) e ficam salvas no aparelho para uso offline.
+const MUSIC_DIR = 'musicas';
+let cloudSyncing = false;
+
+function githubInfoFromLocation() {
+  const h = location.hostname;
+  if (!h.endsWith('.github.io')) return null;
+  const owner = h.slice(0, -'.github.io'.length);
+  const parts = location.pathname.split('/').filter(Boolean);
+  const repo  = parts.length ? parts[0] : `${owner}.github.io`;  // page de projeto vs de usuário
+  return { owner, repo };
+}
+
+async function listViaGitHub(owner, repo, dir) {
+  const api = `https://api.github.com/repos/${owner}/${repo}/contents/${dir}`;
+  const r = await fetch(api, { headers: { Accept: 'application/vnd.github+json' } });
+  if (!r.ok) throw new Error('GitHub ' + r.status);
+  const items = await r.json();
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter(it => it.type === 'file' && AUDIO_EXTS.test(it.name))
+    .map(it => ({ name: it.name, url: it.download_url }));
+}
+
+async function listCloudFolder() {
+  // 1) GitHub Pages → lista automática, sem precisar de manifesto
+  const gh = githubInfoFromLocation();
+  if (gh) {
+    try {
+      const files = await listViaGitHub(gh.owner, gh.repo, MUSIC_DIR);
+      if (files.length) return files;
+    } catch (e) { /* cai para o manifesto abaixo */ }
+  }
+  // 2) Qualquer host → índice musicas/playlist.json (array de nomes)
+  try {
+    const r = await fetch(`./${MUSIC_DIR}/playlist.json`, { cache: 'no-store' });
+    if (r.ok) {
+      const names = await r.json();
+      if (Array.isArray(names)) {
+        return names
+          .filter(n => typeof n === 'string' && AUDIO_EXTS.test(n))
+          .map(n => ({ name: n, url: `./${MUSIC_DIR}/${encodeURIComponent(n)}` }));
+      }
+    }
+  } catch (e) { /* sem pasta/índice */ }
+  return [];
+}
+
+async function syncFromCloud(auto = false) {
+  if (location.protocol === 'file:') {
+    if (!auto) toast('A sincronização precisa da versão hospedada (online).');
+    return;
+  }
+  if (cloudSyncing) return;
+  cloudSyncing = true;
+  try {
+    const files = await listCloudFolder();
+    if (!files.length) {
+      if (!auto) toast('Nenhuma música na pasta "musicas/". Veja COMO-HOSPEDAR.md.');
+      return;
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name, 'pt', { numeric: true }));
+
+    if (!auto) toast(`Sincronizando ${files.length} música(s)…`);
+    setProgress(1);
+
+    let baixadas = 0, mantidas = 0;
+    const total = Math.min(files.length, PROFILES * PADS);
+
+    for (let n = 0; n < total; n++) {
+      const f   = files[n];
+      const p   = Math.floor(n / PADS);
+      const i   = n % PADS;
+      const key = padKey(p, i);
+
+      if (!cache[key]) { const d = await dbGet(key); if (d) cache[key] = d; }
+      if (cache[key] && cache[key].cloud && cache[key].cloudName === f.name) {
+        mantidas++;                                   // já baixada antes — pula download
+      } else {
+        const resp = await fetch(f.url, { cache: 'no-store' });
+        if (!resp.ok) throw new Error(resp.status + ' em ' + f.name);
+        const blob = await resp.blob();
+        const name = f.name.replace(/\.[^/.]+$/, '').slice(0, 26);
+        const data = { name, audio: blob, cloud: true, cloudName: f.name };
+        if (playingKey === key) stopAudioNow();
+        cache[key] = data;
+        await dbSet(key, data);
+        baixadas++;
+      }
+      if (p === currentProfile) await refreshPad(i);
+      setProgress(Math.round(((n + 1) / total) * 100));
+    }
+
+    // Remove pads de nuvem que sobraram (arquivos apagados da pasta).
+    for (let n = total; n < PROFILES * PADS; n++) {
+      const p = Math.floor(n / PADS), i = n % PADS, key = padKey(p, i);
+      if (!cache[key]) { const d = await dbGet(key); if (d) cache[key] = d; }
+      if (cache[key] && cache[key].cloud) {
+        if (playingKey === key) stopAudioNow();
+        delete cache[key];
+        await dbDel(key);
+        if (p === currentProfile) await refreshPad(i);
+      }
+    }
+
+    for (let p = 0; p < PROFILES; p++) await updateProfileDots(p);
+    setTimeout(() => setProgress(0), 600);
+    if (!auto || baixadas) toast(`✓ Nuvem: ${baixadas} nova(s), ${mantidas} já estava(m).`);
+  } catch (e) {
+    setProgress(0);
+    if (!auto) toast('Falha ao sincronizar: ' + (e.message || e));
+  } finally {
+    cloudSyncing = false;
+  }
+}
+
+document.getElementById('btn-sync').addEventListener('click', openNuvemModal);
+
 // Botão: limpar todos os pads do perfil ativo
 document.getElementById('btn-clear-all').addEventListener('click', async () => {
   if (!confirm(`Limpar todos os ${PADS} botões do Perfil ${currentProfile + 1}?`)) return;
@@ -1583,26 +1627,8 @@ async function exportBackup() {
 
 document.getElementById('btn-export').addEventListener('click', exportBackup);
 
-// ─────────────────────── Google Drive ────────────────────────
-let gdriveSetupStep = 1;
-
-// step 0 = status (drive conectado)
-// step 1 = clientid
-// step 2 = folder
-// step 3 = import progress
-// step 4 = success
-const GDRIVE_STEP_NAMES = ['status', 'clientid', 'folder', 'import', 'success'];
-
-function showGDriveStep(step) {
-  document.querySelectorAll('#gdrive-setup-modal .modal-step').forEach(s => s.classList.remove('active'));
-  const name   = GDRIVE_STEP_NAMES[step];
-  const stepEl = document.getElementById(`gdrive-step-${name}`);
-  if (stepEl) {
-    stepEl.classList.remove('hidden'); // garante que hidden não sobrescreva active
-    stepEl.classList.add('active');
-  }
-  gdriveSetupStep = step;
-}
+// ─────────────────────── Nuvem (GitHub sync sem login) ────────
+let nuvemSyncing = false;
 
 function formatTimeAgo(date) {
   const s = Math.floor((Date.now() - date) / 1000);
@@ -1614,351 +1640,121 @@ function formatTimeAgo(date) {
   return `${Math.floor(h / 24)} dia(s) atrás`;
 }
 
-async function openGDriveSetupModal() {
-  if (!location.protocol.startsWith('http')) {
-    toast('O Drive só funciona abrindo via http:// ou https://. Abra pelo computador em rede.');
-    return;
-  }
-
-  document.getElementById('gdrive-setup-modal').classList.add('open');
-  const settings = googleDriveSync.getSettings();
-
-  if (settings.clientId && settings.isConfigured) {
-    // Já configurado: mostra status
-    document.getElementById('gdrive-connected-folder-name').textContent = settings.folderName || '(desconhecida)';
-    document.getElementById('gdrive-last-sync-time').textContent = settings.lastSync
-      ? formatTimeAgo(new Date(settings.lastSync))
-      : 'Nunca';
-    showGDriveStep(0);
-  } else {
-    // Configuração inicial
-    document.getElementById('gdrive-clientid-input').value = settings.clientId || '';
-    showGDriveStep(1);
-  }
+function openNuvemModal() {
+  const lastSync = localStorage.getItem('cloud-last-sync');
+  document.getElementById('nuvem-last-sync-txt').textContent = lastSync
+    ? `Último sync: ${formatTimeAgo(new Date(lastSync))}`
+    : 'Ainda não sincronizado neste dispositivo.';
+  document.getElementById('nuvem-step-info').classList.add('active');
+  document.getElementById('nuvem-step-prog').classList.remove('active');
+  document.getElementById('nuvem-modal').classList.add('open');
 }
 
-async function nextGDriveStep() {
-  if (gdriveSetupStep === 1) {
-    // Validar e salvar Client ID
-    const clientId = document.getElementById('gdrive-clientid-input').value.trim();
-    if (!clientId) {
-      toast('Cole o Client ID antes de continuar');
-      return;
-    }
-
-    if (!clientId.includes('.apps.googleusercontent.com')) {
-      toast('O Client ID parece inválido');
-      return;
-    }
-
-    try {
-      toast('Carregando Google...');
-      await googleDriveSync.init(clientId);
-      await googleDriveSync.requestLogin();
-      toast('Conectado! Digite o nome da pasta.');
-
-      // Vai para step 2 (buscar pasta)
-      showGDriveStep(2);
-      document.getElementById('gdrive-folder-search').focus();
-    } catch (e) {
-      toast('Erro: ' + e.message);
-      console.error(e);
-    }
-  }
+function closeNuvemModal() {
+  if (nuvemSyncing) return;
+  document.getElementById('nuvem-modal').classList.remove('open');
 }
 
-async function loadGDriveFoldersList(searchTerm) {
-  const list    = document.getElementById('gdrive-folders-list');
-  const loading = document.getElementById('gdrive-folders-loading');
-  const error   = document.getElementById('gdrive-folders-error');
+async function startNuvemSync() {
+  if (nuvemSyncing || cloudSyncing) { toast('Já existe uma sincronização em andamento.'); return; }
 
-  list.style.display    = 'none';
-  error.style.display   = 'none';
-  loading.style.display = 'flex';
-  error.textContent     = '';
+  document.getElementById('nuvem-step-info').classList.remove('active');
+  document.getElementById('nuvem-step-prog').classList.add('active');
+  document.getElementById('nuvem-prog-bar').style.width    = '0%';
+  document.getElementById('nuvem-prog-status').textContent = 'Buscando arquivos...';
+  document.getElementById('nuvem-prog-title').textContent  = 'Sincronizando...';
+  document.getElementById('nuvem-sync-close').style.display  = 'none';
+  document.getElementById('nuvem-sync-cancel').style.display = '';
 
-  try {
-    const folders = await googleDriveSync.listFolders(searchTerm);
-
-    loading.style.display = 'none';
-
-    if (!folders.length) {
-      error.textContent   = `Nenhuma pasta encontrada com "${searchTerm}". Verifique o nome e tente novamente.`;
-      error.style.display = 'block';
-      return;
-    }
-
-    list.innerHTML = '';
-    folders.forEach(folder => {
-      const div = document.createElement('div');
-      div.className = 'folder-item';
-      div.innerHTML = `
-        <div class="folder-icon">📁</div>
-        <div class="folder-info">
-          <div class="folder-name">${escapeHtml(folder.name)}</div>
-          <div class="folder-id">${folder.id}</div>
-        </div>`;
-      div.addEventListener('click', () => selectGDriveFolder(folder.id, folder.name));
-      list.appendChild(div);
-    });
-
-    list.style.display = 'flex';
-  } catch (e) {
-    loading.style.display = 'none';
-    error.textContent     = 'Erro ao buscar pastas: ' + e.message;
-    error.style.display   = 'block';
-  }
-}
-
-async function selectGDriveFolder(folderId, folderName) {
-  // Usa o step 3 (import) do próprio modal — tem barra de progresso
-  document.getElementById('gdrive-import-desc').textContent = `Baixando de "${folderName}"...`;
-  document.getElementById('gdrive-import-bar').style.width  = '0%';
-  document.getElementById('gdrive-import-status').textContent = 'Preparando...';
-  document.getElementById('gdrive-import-done').classList.add('hidden');
-  document.getElementById('gdrive-setup-cancel3').style.display = '';
-  showGDriveStep(3);
-
-  try {
-    const files   = await googleDriveSync.syncFolder(folderId, folderName, updateGDriveProgress);
-    const results = await googleDriveSync.importFiles(files, updateGDriveProgress);
-    const padMap  = await importGDriveResults(results, folderId, folderName);
-
-    // Salva o layout na nuvem
-    updateGDriveProgress({ status: 'Salvando layout na nuvem...', percent: 98 });
-    try {
-      await googleDriveSync.saveLayout(padMap, folderId, folderName);
-      updateDriveBtn();
-    } catch (e) {
-      console.warn('Falha ao salvar layout:', e);
-    }
-
-    const ok = results.filter(r => r.success).length;
-    updateGDriveProgress({ status: `✓ ${ok} arquivo(s) importados!`, percent: 100 });
-    document.getElementById('gdrive-import-done').classList.remove('hidden');
-    document.getElementById('gdrive-setup-cancel3').style.display = 'none';
-  } catch (e) {
-    toast('Erro: ' + e.message);
-    document.getElementById('gdrive-setup-modal').classList.remove('open');
-    console.error(e);
-  }
-}
-
-function updateGDriveProgress(progress) {
-  const bar = document.getElementById('gdrive-import-bar');
-  const status = document.getElementById('gdrive-import-status');
-  
-  if (bar) bar.style.width = progress.percent + '%';
-  if (status) {
-    let text = progress.status;
-    if (progress.current && progress.total) {
-      text = `${progress.status} (${progress.current}/${progress.total})`;
-    }
-    status.textContent = text;
-  }
-}
-
-async function importGDriveResults(results, folderId, folderName) {
-  let imported = 0;
-  let p = currentProfile;
-  let i = 0;
-  const padMap = {}; // chave → { name, fileName } — será salvo no Drive
-
-  for (const result of results) {
-    if (!result.success) continue;
-
-    // Encontra próximo slot vazio
-    while (p < PROFILES) {
-      const k = padKey(p, i);
-      if (!cache[k]) {
-        const d = await dbGet(k);
-        if (d) cache[k] = d;
-      }
-      if (!cache[k]) break;
-      i++;
-      if (i >= PADS) { i = 0; p++; }
-    }
-
-    if (p >= PROFILES) break;
-
-    const key  = padKey(p, i);
-    const data = { name: result.name, audio: result.blob };
-    cache[key] = data;
-    await dbSet(key, data);
-
-    padMap[key] = { name: result.name, fileName: result.fileName };
-
-    if (p === currentProfile) await refreshPad(i);
-
-    imported++;
-    i++;
-    if (i >= PADS) { i = 0; p++; }
-  }
-
-  // Atualiza pontos dos perfis
-  for (let pp = currentProfile; pp <= Math.min(p, PROFILES - 1); pp++) {
-    await updateProfileDots(pp);
-  }
-
-  return padMap;
-}
-
-// ─── Restaura pads a partir do layout salvo no Drive ────────────
-async function restoreFromDriveLayout(layout) {
-  if (!layout?.pads || !Object.keys(layout.pads).length) {
-    toast('Layout vazio — nenhum pad para restaurar.');
-    return;
-  }
-
-  const entries = Object.entries(layout.pads);
-  toast(`Restaurando ${entries.length} pad(s) do Drive...`);
+  nuvemSyncing = true;
+  cloudSyncing = true;
   setProgress(1);
-  let restored = 0;
-
-  for (let idx = 0; idx < entries.length; idx++) {
-    const [key, padInfo] = entries[idx];
-    try {
-      const file = await googleDriveSync.findFileByName(layout.folderId, padInfo.fileName);
-      if (!file) { console.warn('Não encontrado no Drive:', padInfo.fileName); continue; }
-
-      const blob = await googleDriveSync.downloadFile(file.id, padInfo.fileName);
-      const data = { name: padInfo.name, audio: blob };
-      cache[key] = data;
-      await dbSet(key, data);
-
-      const m = key.match(/^p(\d+)_i(\d+)$/);
-      if (m) {
-        const profIdx = +m[1];
-        const padIdx  = +m[2];
-        if (profIdx === currentProfile) await refreshPad(padIdx);
-      }
-
-      restored++;
-      setProgress(Math.round(((idx + 1) / entries.length) * 100));
-    } catch (e) {
-      console.warn('Falha ao restaurar pad', key, e);
-    }
-  }
-
-  await buildProfiles();
-  setTimeout(() => setProgress(0), 700);
-  googleDriveSync.folderId   = layout.folderId;
-  googleDriveSync.folderName = layout.folderName;
-  googleDriveSync.lastSync   = new Date().toISOString();
-  googleDriveSync.saveSettings();
-  updateDriveBtn();
-  toast(`✓ ${restored} pad(s) restaurados do Drive!`);
-}
-
-function updateDriveBtn() {
-  const btn = document.getElementById('btn-gdrive');
-  if (googleDriveSync.isConfigured()) {
-    btn.classList.add('drive-connected');
-    btn.title = `Drive: ${googleDriveSync.folderName}`;
-  } else {
-    btn.classList.remove('drive-connected');
-    btn.title = 'Importar do Google Drive';
-  }
-}
-
-function escapeHtml(text) {
-  const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  };
-  return text.replace(/[&<>"']/g, m => map[m]);
-}
-
-// ─── Handlers step 0 (Drive conectado) ──────────────────────────
-document.getElementById('gdrive-sync-now').addEventListener('click', async () => {
-  const settings = googleDriveSync.getSettings();
-  if (!settings.clientId) { toast('Configure o Client ID primeiro'); return; }
-  document.getElementById('gdrive-setup-modal').classList.remove('open');
 
   try {
-    toast('Conectando ao Drive...');
-    await googleDriveSync.init(settings.clientId);
-    await googleDriveSync.requestLogin();
+    const files = await listCloudFolder();
 
-    // Tenta carregar layout da nuvem
-    toast('Verificando layout na nuvem...');
-    const layout = await googleDriveSync.loadLayout();
-
-    if (layout && Object.keys(layout.pads || {}).length > 0) {
-      if (confirm(`Layout encontrado: ${Object.keys(layout.pads).length} pad(s) da pasta "${layout.folderName}".\nRestaurar agora? (sobrescreve pads atuais)`)) {
-        document.getElementById('gdrive-setup-modal').classList.add('open');
-        await restoreFromDriveLayout(layout);
-      }
-    } else if (settings.folderId) {
-      document.getElementById('gdrive-setup-modal').classList.add('open');
-      await selectGDriveFolder(settings.folderId, settings.folderName);
-    } else {
-      toast('Nenhum layout encontrado na nuvem. Selecione uma pasta.');
-      document.getElementById('gdrive-setup-modal').classList.add('open');
-      showGDriveStep(2);
+    if (!files.length) {
+      document.getElementById('nuvem-prog-status').textContent =
+        'Nenhuma música na pasta "musicas/". Faça upload pelo GitHub e sincronize novamente.';
+      document.getElementById('nuvem-sync-close').style.display  = '';
+      document.getElementById('nuvem-sync-cancel').style.display = 'none';
+      setProgress(0);
+      return;
     }
+
+    files.sort((a, b) => a.name.localeCompare(b.name, 'pt', { numeric: true }));
+    const total = Math.min(files.length, PROFILES * PADS);
+    document.getElementById('nuvem-prog-title').textContent = `Sincronizando ${files.length} música(s)...`;
+
+    let baixadas = 0, mantidas = 0;
+
+    for (let n = 0; n < total; n++) {
+      const f   = files[n];
+      const p   = Math.floor(n / PADS);
+      const i   = n % PADS;
+      const key = padKey(p, i);
+      const pct = Math.round((n / total) * 100);
+
+      document.getElementById('nuvem-prog-bar').style.width    = pct + '%';
+      document.getElementById('nuvem-prog-status').textContent = `(${n + 1}/${total}) ${f.name.slice(0, 32)}`;
+      setProgress(pct);
+
+      if (!cache[key]) { const d = await dbGet(key); if (d) cache[key] = d; }
+      if (cache[key] && cache[key].cloud && cache[key].cloudName === f.name) {
+        mantidas++;
+      } else {
+        const resp = await fetch(f.url, { cache: 'no-store' });
+        if (!resp.ok) throw new Error(resp.status + ' em ' + f.name);
+        const blob = await resp.blob();
+        const name = f.name.replace(/\.[^/.]+$/, '').slice(0, 26);
+        const data = { name, audio: blob, cloud: true, cloudName: f.name };
+        if (playingKey === key) stopAudioNow();
+        cache[key] = data;
+        await dbSet(key, data);
+        baixadas++;
+      }
+      if (p === currentProfile) await refreshPad(i);
+    }
+
+    for (let n = total; n < PROFILES * PADS; n++) {
+      const p = Math.floor(n / PADS), i = n % PADS, key = padKey(p, i);
+      if (!cache[key]) { const d = await dbGet(key); if (d) cache[key] = d; }
+      if (cache[key] && cache[key].cloud) {
+        if (playingKey === key) stopAudioNow();
+        delete cache[key];
+        await dbDel(key);
+        if (p === currentProfile) await refreshPad(i);
+      }
+    }
+
+    for (let pp = 0; pp < PROFILES; pp++) await updateProfileDots(pp);
+    localStorage.setItem('cloud-last-sync', new Date().toISOString());
+    setTimeout(() => setProgress(0), 600);
+
+    document.getElementById('nuvem-prog-bar').style.width    = '100%';
+    document.getElementById('nuvem-prog-status').textContent = `✓ ${baixadas} nova(s), ${mantidas} já estava(m).`;
+    document.getElementById('nuvem-sync-close').style.display  = '';
+    document.getElementById('nuvem-sync-cancel').style.display = 'none';
+
   } catch (e) {
-    toast('Erro: ' + e.message);
-    console.error(e);
+    setProgress(0);
+    document.getElementById('nuvem-prog-status').textContent = 'Erro: ' + (e.message || e);
+    document.getElementById('nuvem-sync-close').style.display  = '';
+    document.getElementById('nuvem-sync-cancel').style.display = 'none';
+  } finally {
+    nuvemSyncing = false;
+    cloudSyncing = false;
   }
-});
-
-document.getElementById('gdrive-change-folder').addEventListener('click', () => {
-  document.getElementById('gdrive-clientid-input').value = googleDriveSync.clientId || '';
-  showGDriveStep(1);
-});
-
-document.getElementById('gdrive-disconnect').addEventListener('click', () => {
-  if (!confirm('Desconectar o Google Drive? Os pads locais não serão apagados.')) return;
-  googleDriveSync.reset();
-  updateDriveBtn();
-  document.getElementById('gdrive-setup-modal').classList.remove('open');
-  toast('Drive desconectado.');
-});
-
-// ─── Handlers do modal (btn principal) ──────────────────────────
-document.getElementById('btn-gdrive').addEventListener('click', openGDriveSetupModal);
-document.getElementById('gdrive-setup-close').addEventListener('click', () => {
-  document.getElementById('gdrive-setup-modal').classList.remove('open');
-});
-document.getElementById('gdrive-setup-cancel').addEventListener('click', () => {
-  document.getElementById('gdrive-setup-modal').classList.remove('open');
-});
-document.getElementById('gdrive-setup-cancel2').addEventListener('click', () => {
-  document.getElementById('gdrive-setup-modal').classList.remove('open');
-});
-document.getElementById('gdrive-setup-cancel3').addEventListener('click', () => {
-  document.getElementById('gdrive-setup-modal').classList.remove('open');
-});
-
-document.getElementById('gdrive-import-done').addEventListener('click', () => {
-  document.getElementById('gdrive-setup-modal').classList.remove('open');
-});
-document.getElementById('gdrive-save-clientid').addEventListener('click', nextGDriveStep);
-document.getElementById('gdrive-back-folder').addEventListener('click', () => showGDriveStep(1));
-document.getElementById('gdrive-clientid-input').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') nextGDriveStep();
-});
-
-// Busca de pasta por nome
-async function searchDriveFolders() {
-  const term = document.getElementById('gdrive-folder-search').value.trim();
-  if (!term) { toast('Digite o nome da pasta primeiro'); return; }
-  await loadGDriveFoldersList(term);
 }
-document.getElementById('gdrive-folder-search-btn').addEventListener('click', searchDriveFolders);
-document.getElementById('gdrive-folder-search').addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') searchDriveFolders();
-});
 
-document.getElementById('gdrive-status-close').addEventListener('click', () => {
-  document.getElementById('gdrive-status-modal').classList.remove('open');
+document.getElementById('nuvem-close').addEventListener('click', closeNuvemModal);
+document.getElementById('nuvem-info-close').addEventListener('click', closeNuvemModal);
+document.getElementById('nuvem-do-sync').addEventListener('click', startNuvemSync);
+document.getElementById('nuvem-sync-close').addEventListener('click', closeNuvemModal);
+document.getElementById('nuvem-sync-cancel').addEventListener('click', closeNuvemModal);
+document.getElementById('nuvem-modal').querySelector('.modal-overlay').addEventListener('click', () => {
+  if (!nuvemSyncing) closeNuvemModal();
 });
-document.getElementById('gdrive-status-close-btn').addEventListener('click', () => {
-  document.getElementById('gdrive-status-modal').classList.remove('open');
 });
 
 
@@ -2004,25 +1800,16 @@ async function init() {
   }
   renderVolume();
 
-  // Mostra a URL real do app na instrução do modal (para cadastrar no Google Cloud)
-  const originCodeEl = document.getElementById('gdrive-origin-code');
-  if (originCodeEl) {
-    originCodeEl.textContent = location.protocol === 'file:'
-      ? '(abra via http/https primeiro)'
-      : location.origin;
-  }
-
-  // Pré-carrega os scripts do Google se já houver Client ID salvo,
-  // assim o 1º clique em "Drive" abre o login sem delay de carregamento.
-  if (location.protocol !== 'file:' && googleDriveSync.clientId) {
-    googleDriveSync.init(googleDriveSync.clientId).catch(() => {});
-    updateDriveBtn();
-  }
-
   await preloadProfile(currentProfile);
   await buildProfiles();
   buildGrid();
   for (let i = 0; i < PADS; i++) await refreshPad(i);
+
+  // Busca automaticamente as músicas da pasta na nuvem (se hospedado).
+  // Roda em segundo plano: a interface já aparece com o que está salvo
+  // e vai atualizando conforme baixa as novas.
+  syncFromCloud(true);
+
   // Desregistra service worker para evitar cache antigo
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));

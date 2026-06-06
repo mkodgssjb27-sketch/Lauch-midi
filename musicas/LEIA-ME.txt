@@ -1,0 +1,23 @@
+PASTA DE MÚSICAS NA NUVEM
+=========================
+
+Coloque seus arquivos de áudio (.mp3, .m4a, .wav, .ogg, .aac, .flac) AQUI.
+
+O launchpad lê esta pasta automaticamente e baixa todas as músicas para os
+pads — SEM login, em qualquer telefone. As músicas preenchem os pads em ordem
+alfabética: perfil 1 primeiro, depois perfil 2, e assim por diante.
+
+COMO ATUALIZAR A LISTA
+----------------------
+• GitHub Pages: NÃO precisa fazer nada. É só subir os MP3 nesta pasta no
+  repositório; o app descobre os arquivos sozinho.
+
+• Netlify ou qualquer outro host: depois de adicionar/remover músicas, rode
+  na pasta do programa:
+        node gerar-playlist.js
+  Isso atualiza o arquivo playlist.json (o índice que o app lê).
+
+Dica: para os pads ficarem na ordem que você quer, numere os arquivos:
+   01 - Musica A.mp3
+   02 - Musica B.mp3
+   03 - Musica C.mp3
