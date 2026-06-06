@@ -508,6 +508,56 @@
       color: #777;
     }
 
+    .cloud-song-item {
+      display: flex;
+      align-items: center;
+      padding: 7px 10px;
+      margin-bottom: 4px;
+      background: #2a2a3a;
+      border-radius: 8px;
+      gap: 8px;
+    }
+    .cloud-song-item:hover { background: #32324a; }
+    .cloud-song-name {
+      flex: 1;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #ccc;
+    }
+    .cloud-song-add {
+      flex-shrink: 0;
+      background: #3a5ab0;
+      border: none;
+      color: #fff;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .cloud-song-add:hover { background: #4a6ac0; }
+    .pad-pick-btn {
+      aspect-ratio: 1;
+      border-radius: 6px;
+      border: none;
+      font-size: 10px;
+      cursor: pointer;
+      padding: 3px;
+      overflow: hidden;
+      line-height: 1.2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: filter 0.15s;
+    }
+    .pad-pick-btn.has-audio { background: #1e4a2e; color: #8ef; }
+    .pad-pick-btn.empty { background: #252540; color: #668; }
+    .pad-pick-btn:hover { filter: brightness(1.4); }
+    .pad-pick-num { font-weight: 700; font-size: 11px; }
+    .pad-pick-label { font-size: 8px; white-space: nowrap; overflow: hidden; max-width: 100%; text-overflow: ellipsis; }
+
     .modal-actions {
       display: flex;
       gap: 8px;
@@ -745,7 +795,6 @@
       </div>
       <button class="tb-btn danger-btn" id="btn-clear-all" title="Limpar todos os pads do perfil atual">🗑️ Limpar tudo</button>
       <button class="tb-btn" id="btn-folder" title="Importar uma pasta inteira">📂 Pasta</button>
-      <button class="tb-btn save" id="btn-export" title="Salvar um arquivo de backup com TODAS as mídias e edições (todos os perfis)">💾 Backup</button>
       <button class="tb-btn save" id="btn-sync" title="Importar músicas da pasta musicas/ no GitHub — sem login, qualquer dispositivo">☁ Nuvem</button>
     </div>
     <div id="grid"></div>
@@ -792,7 +841,8 @@
       <p id="nuvem-last-sync-txt" style="font-size:12px; color:#888; margin-bottom:14px;"></p>
 
       <div class="modal-actions">
-        <button id="nuvem-do-sync" class="btn btn-primary">🔄 Sincronizar Agora</button>
+        <button id="nuvem-do-sync" class="btn btn-primary">🔄 Sincronizar Tudo</button>
+        <button id="nuvem-do-pick" class="btn btn-secondary">🎵 Escolher Música</button>
         <button id="nuvem-info-close" class="btn btn-secondary">Fechar</button>
       </div>
     </div>
@@ -811,6 +861,29 @@
         <button id="nuvem-sync-cancel" class="btn btn-secondary">Fechar</button>
       </div>
     </div>
+
+    <!-- Step 3: lista de músicas individuais -->
+    <div id="nuvem-step-pick" class="modal-step">
+      <h3 style="margin-bottom:10px; color:#8cf; font-size:16px;">🎵 Escolher da Nuvem</h3>
+      <p class="modal-desc" style="margin-bottom:10px;">Toque em <strong>+ Adicionar</strong> ao lado de uma música e escolha o pad de destino.</p>
+      <div id="nuvem-pick-loading" style="text-align:center; padding:20px; color:#888;">Carregando lista...</div>
+      <div id="nuvem-pick-list" style="max-height:280px; overflow-y:auto; margin-bottom:12px;"></div>
+      <div class="modal-actions">
+        <button id="nuvem-pick-back" class="btn btn-secondary">← Voltar</button>
+      </div>
+    </div>
+
+    <!-- Step 4: escolher o pad de destino -->
+    <div id="nuvem-step-padpick" class="modal-step">
+      <h3 style="margin-bottom:6px; color:#8cf; font-size:15px;">Escolher pad de destino</h3>
+      <p id="nuvem-padpick-songname" style="font-size:12px; color:#aaa; margin-bottom:4px;"></p>
+      <p style="font-size:12px; color:#666; margin-bottom:12px;">Perfil atual: <strong id="nuvem-padpick-profnum"></strong></p>
+      <div id="nuvem-padpick-grid" style="display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:14px;"></div>
+      <div class="modal-actions">
+        <button id="nuvem-padpick-back" class="btn btn-secondary">← Voltar</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1550,61 +1623,6 @@ document.getElementById('btn-folder').addEventListener('click', () => {
   inp.click();
 });
 
-// ────────────── Backup: exportar (.midipad) ─────────────────
-// Formato do arquivo:
-//   [4 bytes  ] Uint32 LE  = tamanho do cabeçalho JSON
-//   [N bytes  ] cabeçalho JSON (UTF-8) com a lista de itens e metadados
-//   [restante ] bytes de cada áudio, concatenados na ordem do cabeçalho
-// Assim o backup carrega TODAS as mídias + nomes de TODOS os perfis em um
-// único arquivo, sem inflar com base64 e funcionando 100% offline.
-
-async function exportBackup() {
-  try {
-    toast('Preparando backup…');
-    setProgress(5);
-    const entries = await dbGetAllEntries();
-    const items = [];
-    const blobs = [];
-    for (const { key, value } of entries) {
-      if (!value || !value.audio) continue;
-      const blob = blobOf(value);
-      items.push({ key, name: value.name || key, type: blob.type || 'audio/mpeg', size: blob.size });
-      blobs.push(blob);
-    }
-    if (!items.length) { setProgress(0); toast('Nada para salvar — importe mídias primeiro.'); return; }
-
-    const header = {
-      magic:    'MIDIPAD-BACKUP',
-      version:  1,
-      created:  new Date().toISOString(),
-      profiles: PROFILES,
-      pads:     PADS,
-      settings: { masterVolume },
-      items,
-    };
-    const headerBytes = new TextEncoder().encode(JSON.stringify(header));
-    const lenBuf = new Uint8Array(4);
-    new DataView(lenBuf.buffer).setUint32(0, headerBytes.length, true);
-
-    const file = new Blob([lenBuf, headerBytes, ...blobs], { type: 'application/octet-stream' });
-    const url  = URL.createObjectURL(file);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `midipad-backup-${new Date().toISOString().slice(0,10)}.midipad`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 8000);
-    setProgress(0);
-    toast(`✓ Backup salvo: ${items.length} mídia(s).`);
-  } catch (e) {
-    setProgress(0);
-    toast('Falha ao gerar backup: ' + (e.message || e));
-  }
-}
-
-document.getElementById('btn-export').addEventListener('click', exportBackup);
-
 // ─────────────────────── Nuvem (GitHub sync sem login) ────────
 let nuvemSyncing = false;
 
@@ -1625,12 +1643,17 @@ function openNuvemModal() {
     : 'Ainda não sincronizado neste dispositivo.';
   document.getElementById('nuvem-step-info').classList.add('active');
   document.getElementById('nuvem-step-prog').classList.remove('active');
+  document.getElementById('nuvem-step-pick').classList.remove('active');
+  document.getElementById('nuvem-step-padpick').classList.remove('active');
   document.getElementById('nuvem-modal').classList.add('open');
 }
 
 function closeNuvemModal() {
   if (nuvemSyncing) return;
   document.getElementById('nuvem-modal').classList.remove('open');
+  document.getElementById('nuvem-step-pick').classList.remove('active');
+  document.getElementById('nuvem-step-padpick').classList.remove('active');
+  document.getElementById('nuvem-step-info').classList.add('active');
 }
 
 async function startNuvemSync() {
@@ -1733,6 +1756,101 @@ document.getElementById('nuvem-sync-cancel').addEventListener('click', closeNuve
 document.getElementById('nuvem-modal').querySelector('.modal-overlay').addEventListener('click', () => {
   if (!nuvemSyncing) closeNuvemModal();
 });
+document.getElementById('nuvem-do-pick').addEventListener('click', openNuvemPicker);
+document.getElementById('nuvem-pick-back').addEventListener('click', () => {
+  document.getElementById('nuvem-step-pick').classList.remove('active');
+  document.getElementById('nuvem-step-info').classList.add('active');
+});
+document.getElementById('nuvem-padpick-back').addEventListener('click', () => {
+  document.getElementById('nuvem-step-padpick').classList.remove('active');
+  document.getElementById('nuvem-step-pick').classList.add('active');
+});
+
+// ─────────────────────── Nuvem: escolher música individual ────
+let cloudFileList = null;
+let pickedCloudFile = null;
+
+async function openNuvemPicker() {
+  document.getElementById('nuvem-step-info').classList.remove('active');
+  document.getElementById('nuvem-step-pick').classList.add('active');
+  const loadingEl = document.getElementById('nuvem-pick-loading');
+  const listEl    = document.getElementById('nuvem-pick-list');
+  loadingEl.style.display = '';
+  loadingEl.textContent   = 'Carregando lista...';
+  listEl.innerHTML = '';
+
+  try {
+    if (!cloudFileList) cloudFileList = await listCloudFolder();
+    const files = [...cloudFileList].sort((a, b) => a.name.localeCompare(b.name, 'pt', { numeric: true }));
+    loadingEl.style.display = 'none';
+
+    if (!files.length) {
+      listEl.innerHTML = '<p style="color:#888;text-align:center;padding:20px;">Nenhuma música na pasta musicas/</p>';
+      return;
+    }
+
+    for (const f of files) {
+      const item = document.createElement('div');
+      item.className = 'cloud-song-item';
+      const label = f.name.replace(/\.[^/.]+$/, '');
+      item.innerHTML = `<span class="cloud-song-name" title="${f.name}">${label}</span>
+        <button class="cloud-song-add">+ Adicionar</button>`;
+      item.querySelector('button').addEventListener('click', () => showPadPicker(f));
+      listEl.appendChild(item);
+    }
+  } catch (e) {
+    loadingEl.textContent = 'Erro: ' + (e.message || e);
+  }
+}
+
+function showPadPicker(file) {
+  pickedCloudFile = file;
+  document.getElementById('nuvem-step-pick').classList.remove('active');
+  document.getElementById('nuvem-step-padpick').classList.add('active');
+
+  const label = file.name.replace(/\.[^/.]+$/, '').slice(0, 50);
+  document.getElementById('nuvem-padpick-songname').textContent = '♪ ' + label;
+  document.getElementById('nuvem-padpick-profnum').textContent  = currentProfile + 1;
+
+  const grid = document.getElementById('nuvem-padpick-grid');
+  grid.innerHTML = '';
+
+  for (let i = 0; i < PADS; i++) {
+    const data = cache[padKey(currentProfile, i)];
+    const btn  = document.createElement('button');
+    btn.className = 'pad-pick-btn ' + (data ? 'has-audio' : 'empty');
+    btn.title     = data ? (data.name || ('Pad ' + (i + 1))) : ('Pad ' + (i + 1) + ' — vazio');
+    btn.innerHTML = `<span class="pad-pick-num">${i + 1}</span><span class="pad-pick-label">${data ? (data.name || '').slice(0, 8) : 'vazio'}</span>`;
+    btn.addEventListener('click', () => assignPickedToPad(i));
+    grid.appendChild(btn);
+  }
+}
+
+async function assignPickedToPad(padIndex) {
+  if (!pickedCloudFile) return;
+  const file = pickedCloudFile;
+  closeNuvemModal();
+  toast(`↓ Baixando ${file.name.slice(0, 28)}…`);
+  setProgress(10);
+  try {
+    const resp = await fetch(file.url, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(resp.status + ' ao baixar');
+    const blob = await resp.blob();
+    const name = file.name.replace(/\.[^/.]+$/, '').slice(0, 26);
+    const key  = padKey(currentProfile, padIndex);
+    const data = { name, audio: blob, cloud: true, cloudName: file.name };
+    if (playingKey === key) stopAudioNow();
+    cache[key] = data;
+    await dbSet(key, data);
+    await refreshPad(padIndex);
+    await updateProfileDots(currentProfile);
+    setProgress(0);
+    toast(`✓ "${name}" → perfil ${currentProfile + 1}, pad ${padIndex + 1}`);
+  } catch (e) {
+    setProgress(0);
+    toast('Erro ao baixar: ' + (e.message || e));
+  }
+}
 
 
 // ─────────────────────── Pré-carrega cache ───────────────────
