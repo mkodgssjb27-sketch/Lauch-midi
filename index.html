@@ -979,7 +979,6 @@ function buildGrid() {
 
 // ─────────────────────── Eventos do pad ──────────────────────
 function attachPadEvents(pad, index) {
-  let lastTouchFired = 0;
   let touchMoved = false, startX = 0, startY = 0;
 
   pad.addEventListener('touchstart', e => {
@@ -989,23 +988,20 @@ function attachPadEvents(pad, index) {
   }, { passive: true });
 
   pad.addEventListener('touchmove', e => {
-    // Mais de 10px de movimento → usuário está scrollando, ignorar
     if (Math.abs(e.touches[0].clientX - startX) > 10 ||
         Math.abs(e.touches[0].clientY - startY) > 10) touchMoved = true;
   }, { passive: true });
 
-  // touchend responde imediatamente, sem esperar o click sintético (300ms)
-  pad.addEventListener('touchend', () => {
+  // touchend: resposta imediata + preventDefault suprime o click sintético,
+  // impedindo que ele reinicie a música após o fade começar.
+  pad.addEventListener('touchend', e => {
     if (touchMoved) return;
-    lastTouchFired = Date.now();
+    e.preventDefault();
     onPadTap(index);
-  }, { passive: true });
+  }); // NÃO passive — precisa de preventDefault
 
-  // click cobre mouse/desktop; descarta o click sintético gerado após touchend
-  pad.addEventListener('click', () => {
-    if (Date.now() - lastTouchFired < 600) return;
-    onPadTap(index);
-  });
+  // click só chega aqui via mouse/desktop (touchend já suprimiu o sintético)
+  pad.addEventListener('click', () => onPadTap(index));
 
   pad.addEventListener('contextmenu', e => e.preventDefault());
 }
