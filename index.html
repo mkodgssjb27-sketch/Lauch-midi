@@ -892,6 +892,7 @@ let fadeInRAF       = null;
 let fadingOutAudio  = null;
 let cancelFadeOutFn = null;
 let playingKey     = null;
+let fadingKey      = null;   // chave do pad cujo áudio está em fade-out
 let pausedKey      = null;   // chave do pad pausado (permite retomar)
 let isPaused       = false;
 let masterVolume   = 1;
@@ -1114,6 +1115,9 @@ function onPadTap(index) {
   // Mesmo pad tocando → fade out e stop
   if (playingKey === key) { stopWithFade(); return; }
 
+  // Pad em fade-out → ignorar (evita reinício por click sintético duplicado)
+  if (fadingKey === key) return;
+
   // Pad diferente → para o atual agora e toca o novo imediatamente
   stopAudioNow();
   playPad(key, data, index);
@@ -1126,6 +1130,7 @@ function stopAudioNow() {
   const audio = currentAudio;
   currentAudio  = null;
   fadingOutAudio = null;
+  fadingKey = null;
   playingKey = null; pausedKey = null; isPaused = false;
   document.querySelectorAll('.pad').forEach(p => p.classList.remove('playing', 'paused'));
   updatePauseBtn();
@@ -1139,11 +1144,11 @@ function stopWithFade() {
   if (cancelFadeOutFn) { stopAudioNow(); return; }
 
   const audio = currentAudio;
-  const idx   = findPadIndex(playingKey);
 
   if (fadeInRAF) { cancelAnimationFrame(fadeInRAF); fadeInRAF = null; }
 
-  // Limpa estado agora para que novos toques funcionem corretamente durante o fade
+  // Marca qual pad está em fade para bloquear reinício por clicks duplicados
+  fadingKey    = playingKey;
   currentAudio = null;
   playingKey   = null;
   pausedKey    = null;
@@ -1151,7 +1156,7 @@ function stopWithFade() {
   document.querySelectorAll('.pad').forEach(p => p.classList.remove('playing', 'paused'));
   updatePauseBtn();
 
-  startFadeOut(audio, FADE_OUT_MS, () => killAudio(audio));
+  startFadeOut(audio, FADE_OUT_MS, () => { fadingKey = null; killAudio(audio); });
 }
 
 function blobOf(data) {
