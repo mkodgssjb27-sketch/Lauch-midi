@@ -588,7 +588,7 @@
       overflow: hidden;
       min-width: 0;
       min-height: 0;
-      outline: 1px solid rgba(255,255,255,0.14);
+      border: 1px solid rgba(90, 110, 200, 0.35);
     }
 
     /* Anel de progresso do long-press */
@@ -633,13 +633,12 @@
 
     .pad-icon { font-size: 13px; opacity: 0.7; }
 
-    /* Vazio — usa a cor da paleta com brilho reduzido para sempre ser visível */
+    /* Vazio */
     .pad.empty .pad-inner {
-      background: var(--pad-grad);
-      filter: brightness(0.28) saturate(0.7);
-      box-shadow: inset 0 2px 8px rgba(0,0,0,0.6);
+      background: radial-gradient(ellipse at 42% 28%, #3a4878, #1e2850);
+      box-shadow: inset 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07);
     }
-    .pad.empty .pad-icon { opacity: 0.35; }
+    .pad.empty .pad-icon { opacity: 0.45; }
 
     /* Carregado */
     .pad.loaded .pad-inner {
@@ -1432,50 +1431,27 @@ async function importBatch(files) {
 //    script gerar-playlist.js).
 // A pasta é a fonte da verdade: as músicas preenchem os pads em ordem
 // (perfil 1 → perfil 7) e ficam salvas no aparelho para uso offline.
-const MUSIC_DIR = 'musicas';
+const MUSIC_DIR    = 'musicas';
+const GITHUB_OWNER = 'mkodgssjb27-sketch';
+const GITHUB_REPO  = 'Lauch-midi';
+const GITHUB_BRANCH = 'main';
 let cloudSyncing = false;
 
-function githubInfoFromLocation() {
-  const h = location.hostname;
-  if (!h.endsWith('.github.io')) return null;
-  const owner = h.slice(0, -'.github.io'.length);
-  const parts = location.pathname.split('/').filter(Boolean);
-  const repo  = parts.length ? parts[0] : `${owner}.github.io`;  // page de projeto vs de usuário
-  return { owner, repo };
-}
-
-async function listViaGitHub(owner, repo, dir) {
-  const api = `https://api.github.com/repos/${owner}/${repo}/contents/${dir}`;
-  const r = await fetch(api, { headers: { Accept: 'application/vnd.github+json' } });
-  if (!r.ok) throw new Error('GitHub ' + r.status);
-  const items = await r.json();
-  if (!Array.isArray(items)) return [];
-  return items
-    .filter(it => it.type === 'file' && AUDIO_EXTS.test(it.name))
-    .map(it => ({ name: it.name, url: it.download_url }));
-}
-
 async function listCloudFolder() {
-  // 1) GitHub Pages → lista automática, sem precisar de manifesto
-  const gh = githubInfoFromLocation();
-  if (gh) {
-    try {
-      const files = await listViaGitHub(gh.owner, gh.repo, MUSIC_DIR);
-      if (files.length) return files;
-    } catch (e) { /* cai para o manifesto abaixo */ }
-  }
-  // 2) Qualquer host → índice musicas/playlist.json (array de nomes)
+  // Sempre usa o GitHub diretamente — funciona no APK e no navegador
   try {
-    const r = await fetch(`./${MUSIC_DIR}/playlist.json`, { cache: 'no-store' });
+    const api = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${MUSIC_DIR}`;
+    const r = await fetch(api, { headers: { Accept: 'application/vnd.github+json' } });
     if (r.ok) {
-      const names = await r.json();
-      if (Array.isArray(names)) {
-        return names
-          .filter(n => typeof n === 'string' && AUDIO_EXTS.test(n))
-          .map(n => ({ name: n, url: `./${MUSIC_DIR}/${encodeURIComponent(n)}` }));
+      const items = await r.json();
+      if (Array.isArray(items)) {
+        const files = items
+          .filter(it => it.type === 'file' && AUDIO_EXTS.test(it.name))
+          .map(it => ({ name: it.name, url: it.download_url }));
+        if (files.length) return files;
       }
     }
-  } catch (e) { /* sem pasta/índice */ }
+  } catch (e) { console.warn('GitHub API:', e.message); }
   return [];
 }
 
@@ -1756,7 +1732,6 @@ document.getElementById('nuvem-sync-close').addEventListener('click', closeNuvem
 document.getElementById('nuvem-sync-cancel').addEventListener('click', closeNuvemModal);
 document.getElementById('nuvem-modal').querySelector('.modal-overlay').addEventListener('click', () => {
   if (!nuvemSyncing) closeNuvemModal();
-});
 });
 
 
